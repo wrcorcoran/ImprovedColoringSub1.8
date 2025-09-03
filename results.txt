@@ -1,0 +1,77 @@
+Set parameter Username
+Set parameter LicenseID to value 2607225
+Academic license - for non-commercial use only - expires 2026-01-07
+Mode options:
+  1) Solve without fixing any variables
+  2) Interactively choose variables to fix (press Enter to skip each)
+  3) Fix all variables (including lambda) and only print lambda configuration values
+Select mode [1/2/3]: Gurobi Optimizer version 12.0.3 build v12.0.3rc0 (mac64[arm] - Darwin 24.2.0 24C101)
+
+CPU model: Apple M1 Max
+Thread count: 10 physical cores, 10 logical processors, using up to 10 threads
+
+Optimize a model with 16 rows, 16 columns and 33 nonzeros
+Model fingerprint: 0x4256168f
+Model has 5 quadratic constraints
+Coefficient statistics:
+  Matrix range     [7e-01, 2e+00]
+  QMatrix range    [1e+00, 3e+00]
+  QLMatrix range   [5e-01, 1e+00]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 2e+00]
+  QRHS range       [2e+00, 2e+00]
+Presolve removed 7 rows and 6 columns
+
+Continuous model is non-convex -- solving as a MIP
+
+Presolve removed 7 rows and 6 columns
+Presolve time: 0.00s
+Presolved: 28 rows, 16 columns, 77 nonzeros
+Presolved model has 7 bilinear constraint(s)
+Warning: Model contains variables with very large bounds participating
+         in product terms.
+         Presolve was not able to compute smaller bounds for these variables.
+         Consider bounding these variables or reformulating the model.
+
+Variable types: 16 continuous, 0 integer (0 binary)
+Found heuristic solution: objective 1.8034851
+
+Root relaxation: interrupted, 10 iterations, 0.00 seconds (0.00 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0          -    0         1.80349    1.80342  0.00%     -    0s
+
+Explored 1 nodes (10 simplex iterations) in 0.00 seconds (0.00 work units)
+Thread count was 10 (of 10 available processors)
+
+Solution count 1: 1.80349 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 1.803485068163e+00, best bound 1.803416462378e+00, gap 0.0038%
+
+Optimal solution:
+lambda: 1.80348507
+eta:
+  eta_1: 0.0557227666
+  eta_2: 0.0661391524
+P:
+  P_1: 1
+  P_2: 0.356626839
+  P_3: 0.15174253
+  P_4: 0.101161686
+  P_5: 0
+  P_6: 0
+  P_7: 0
+lambdas:
+
+--- Lambda configuration values (recomputed) ---
+lambda_calc(2, 2): 1.80348504
+lambda_calc(3, 3): 1.79876972
+lambda_calc(3, 3): 1.80348482
+lambda_calc(3, 2): 1.80348506
+lambda_calc(5, 3): 1.80348502
+lambda_calc(4, 2): 1.74453485
+lambda_calc(7, 3): 1.80348506

@@ -31,75 +31,76 @@ m = gp.Model("colorings_qp")
 # Variables
 lmbda = m.addVar(lb=0.0, name="lambda")
 
-alpha_1 = m.addVar(name="alpha_1")
-alpha_2 = m.addVar(name="alpha_2")
-alpha_2_case_1 = m.addVar(name="alpha_2_case_1")
-alpha_2_case_2 = m.addVar(name="alpha_2_case_2")
-beta_1 = m.addVar(name="beta_1")
-beta_2 = m.addVar(name="beta_2")
-
-eta = {i: m.addVar(lb=0.0, ub=1.0, name=f"eta_{i}") for i in range(1, DC_MAX + 1)}
+eta = {i: m.addVar(lb=0.0, ub=1, name=f"eta_{i}") for i in range(1, DC_MAX + 1)}
 P = {i: m.addVar(lb=0.0, ub=1.0, name=f"P_{i}") for i in range(1, N_MAX + 1)}
 lam = {cfg: m.addVar(name=f"lambda_{cfg}") for cfg in configs}
 
 
-# scaled etas (η_i / Δ)
+# scaled etas (η_i)
 def Eta(i: int):
-    return eta[i] / Delta
+    return eta[i]
 
 
 def Gamma(cfg):
     if cfg in UNBLOCKED_CONFIGS:
-        return lmbda - (1 - 2 * P[2]) * Delta
-    return lmbda - (1 - 2 * P[3]) * Delta
+        return (lmbda - (1 - 2 * P[2]))
+    return (lmbda - (1 - 2 * P[3]))
 
 
-def Alpha1(cfg):
-    if USE_ORIGINAL:
-        return gp.LinExpr(0)
-    return Eta(1) * (Gamma(cfg) + (1 + P[2]) * Delta)
-
-
-def Alpha2_case1(cfg):
-    if USE_ORIGINAL:
-        return gp.LinExpr(0)
-    return (
-        Eta(2) * Gamma(cfg)
-        + 2 * Eta(2)
-        - (1 - P[3]) * Delta * Eta(1)
-        + (Eta(2) - Eta(1)) * 2 * lmbda
-    )
-
-
-def Alpha2_case2(cfg):
-    if USE_ORIGINAL:
-        return gp.LinExpr(0)
-    return Eta(2) * Gamma(cfg) + (1 + P[2]) * Eta(2) + (Eta(2) - Eta(1)) * 2 * lmbda
-
-
-def Beta(cfg):
-    if USE_ORIGINAL:
-        return gp.LinExpr(0)
-    if cfg in DC_EQ1_CASES:
-        return Eta(1) * (lmbda - Delta - 2)
-    return Eta(2) * (lmbda - Delta - 2)
-
-
-def lambda_expression(cfg):
+def lambda_bounds(cfg):
+    bounds = []
     if cfg == (2, 2):
-        return 2 - P[2] + alpha_1
+        if USE_ORIGINAL:
+            alpha_1_val = 0
+        else:
+            alpha_1_val = Eta(1) * (Gamma(cfg) + (1 + P[2]))
+        bounds.append(2 - P[2] + alpha_1_val)
+
     elif cfg == (3, 3):
-        return 1.5 + 0.5 * P[3] + alpha_2
+        if USE_ORIGINAL:
+            bounds.append(1.5 + 0.5 * P[3])
+        else:
+            expr1 = (
+                1.5
+                + 0.5 * P[3]
+                + Eta(2) * Gamma(cfg)
+                + 2 * Eta(2)
+                - (1 - P[3]) * Eta(1)
+                + (Eta(2) - Eta(1)) * 2 * lmbda
+            )
+            expr2 = (
+                1.5
+                + 0.5 * P[3]
+                + Eta(2) * Gamma(cfg)
+                + (1 + P[2]) * Eta(2)
+                + (Eta(2) - Eta(1)) * 2 * lmbda
+            )
+            bounds.extend([expr1, expr2])
+
     elif cfg == (3, 2):
-        return 2 - P[3] - beta_1
+        if USE_ORIGINAL:
+            beta_1_val = 0
+        else:
+            beta_1_val = Eta(1) * (lmbda - 1)
+        bounds.append(2 - P[3] - beta_1_val)
+
     elif cfg == (5, 3):
-        return 1.5 + P[2] + 0.5 * P[5] - beta_2
+        if USE_ORIGINAL:
+            beta_2_val = 0
+        else:
+            beta_2_val = Eta(2) * (lmbda - 1)
+        bounds.append(1.5 + P[2] + 0.5 * P[5] - beta_2_val)
+
     elif cfg == (4, 2):
-        return 2 - P[2] + 2 * (P[3] - P[4])
+        bounds.append(2 - P[2] + 2 * (P[3] - P[4]))
+
     elif cfg == (7, 3):
-        return 1.5 + 2 * P[3]
+        bounds.append(1.5 + 2 * P[3])
+
     else:
         raise ValueError(f"Unknown config: {cfg}")
+
+    return bounds
 
 
 # Core constraints
@@ -114,28 +115,14 @@ for j in range(2, N_MAX + 1):
 for i in range(1, DC_MAX):
     m.addConstr(eta[i] <= eta[i + 1], name=f"eta_monotone_{i}")
 
-# alpha/beta bounds
-cfg = (2, 2)
-m.addConstr(alpha_1 >= Alpha1(cfg), name="alpha1_bound")
-
-# NOTE: I think there's a logic error here, because it's being flipped to >=
-# the portion that should be a min becomes a max
-cfg = (3, 3)
-m.addConstr(alpha_2_case_1 >= Alpha2_case1(cfg), name="alpha2_case1")
-m.addConstr(alpha_2_case_2 >= Alpha2_case2(cfg), name="alpha2_case2")
-m.addConstr(alpha_2 >= alpha_2_case_1, name="alpha2_case1")
-m.addConstr(alpha_2 >= alpha_2_case_2, name="alpha2_case2")
-
-cfg = (3, 2)
-m.addConstr(beta_1 == Beta(cfg), name="beta1_def")
-
-cfg = (5, 3)
-m.addConstr(beta_2 == Beta(cfg), name="beta2_def")
+# Removed alpha/beta bounds and definitions constraints
 
 # lambda constraints
 for cfg in configs:
-    m.addConstr(lam[cfg] >= lambda_expression(cfg), name=f"lambda_{cfg}")
-    m.addConstr(lmbda >= lam[cfg] * Delta, name=f"obj_bounds_{cfg}")
+    lbs = lambda_bounds(cfg)
+    for k, expr in enumerate(lbs):
+        m.addConstr(lam[cfg] >= expr, name=f"lambda_{cfg}_{k}")
+    m.addConstr(lmbda >= lam[cfg], name=f"obj_bounds_{cfg}")
 
 ################################
 ## QUADRATIC PROGRAM ENDS HERE
@@ -164,33 +151,160 @@ def run_interactive_fixing():
         prompt_fix(P[i], f"P_{i}")
 
 
-def print_lambda_calculations():
-    if m.status != GRB.OPTIMAL:
-        print("Model not solved to optimality.")
-        return
+def lambda_bounds_numeric(cfg, fixed):
+    # fixed: dict with keys "lambda", "eta", "P"
+    lmbda_val = fixed["lambda"]
+    eta_val = fixed["eta"]
+    P_val = fixed["P"]
+    bounds = []
+    if cfg == (2, 2):
+        if USE_ORIGINAL:
+            alpha_1_val = 0
+        else:
+            alpha_1_val = eta_val[1] * (lmbda_val - (1 - 2 * P_val[2]) + (1 + P_val[2]))
+        bounds.append(2 - P_val[2] + alpha_1_val)
+
+    elif cfg == (3, 3):
+        if USE_ORIGINAL:
+            bounds.append(1.5 + 0.5 * P_val[3])
+        else:
+            gamma = lmbda_val - (1 - 2 * P_val[3])
+            expr1 = (
+                1.5
+                + 0.5 * P_val[3]
+                + eta_val[2] * gamma
+                + 2 * eta_val[2]
+                - (1 - P_val[3]) * eta_val[1]
+                + (eta_val[2] - eta_val[1]) * 2 * lmbda_val
+            )
+            expr2 = (
+                1.5
+                + 0.5 * P_val[3]
+                + eta_val[2] * gamma
+                + (1 + P_val[2]) * eta_val[2]
+                + (eta_val[2] - eta_val[1]) * 2 * lmbda_val
+            )
+            bounds.extend([expr1, expr2])
+
+    elif cfg == (3, 2):
+        if USE_ORIGINAL:
+            beta_1_val = 0
+        else:
+            beta_1_val = eta_val[1] * (lmbda_val - 1)
+        bounds.append(2 - P_val[3] - beta_1_val)
+
+    elif cfg == (5, 3):
+        if USE_ORIGINAL:
+            beta_2_val = 0
+        else:
+            if (5, 3) in DC_EQ1_CASES:
+                beta_2_val = eta_val[1] * (lmbda_val - 1)
+            else:
+                beta_2_val = eta_val[2] * (lmbda_val - 1)
+        bounds.append(1.5 + P_val[2] + 0.5 * P_val[5] - beta_2_val)
+
+    elif cfg == (4, 2):
+        bounds.append(2 - P_val[2] + 2 * (P_val[3] - P_val[4]))
+
+    elif cfg == (7, 3):
+        bounds.append(1.5 + 2 * P_val[3])
+
+    else:
+        raise ValueError(f"Unknown config: {cfg}")
+    return bounds
+
+
+def print_lambda_calculations(fixed_vals=None):
     print("\n--- Lambda configuration values (recomputed) ---")
-    for cfg in configs:
-        val = lambda_expression(cfg).getValue()
-        print(f"lambda_calc{cfg}: {val:.9g}")
+    if fixed_vals is not None:
+        for cfg in configs:
+            try:
+                vals = lambda_bounds_numeric(cfg, fixed_vals)
+                for v in vals:
+                    print(f"lambda_calc{cfg}: {v:.9g}")
+            except Exception as e:
+                print(f"lambda_calc{cfg}: ERROR: {e}")
+    else:
+        for cfg in configs:
+            for val in lambda_bounds(cfg):
+                try:
+                    print(f"lambda_calc{cfg}: {val.getValue():.9g}")
+                except Exception as e:
+                    print(f"lambda_calc{cfg}: ERROR: {e}")
+
+
+def run_fix_all():
+    # Collect numeric values for lambda, eta, P
+    fixed_lambda = None
+    fixed_eta = {}
+    fixed_P = {}
+    # Prompt for lambda
+    try:
+        s = input(f"Fix lambda? Enter value or press Enter to skip: ").strip()
+    except EOFError:
+        s = ""
+    if s != "":
+        try:
+            fixed_lambda = float(s)
+        except ValueError:
+            raise ValueError(f"Invalid numeric value for lambda: {s}")
+    # Prompt for all eta[i]
+    for i in sorted(eta.keys()):
+        try:
+            s = input(f"Fix eta_{i}? Enter value or press Enter to skip: ").strip()
+        except EOFError:
+            s = ""
+        if s != "":
+            try:
+                fixed_eta[i] = float(s)
+            except ValueError:
+                raise ValueError(f"Invalid numeric value for eta_{i}: {s}")
+    # Prompt for all P[i]
+    for i in sorted(P.keys()):
+        try:
+            s = input(f"Fix P_{i}? Enter value or press Enter to skip: ").strip()
+        except EOFError:
+            s = ""
+        if s != "":
+            try:
+                fixed_P[i] = float(s)
+            except ValueError:
+                raise ValueError(f"Invalid numeric value for P_{i}: {s}")
+    # Fill missing eta/P with zeros (or leave as is? We'll require all values)
+    # To make sure all needed values are present, fill missing with zeros
+    for i in eta.keys():
+        if i not in fixed_eta:
+            fixed_eta[i] = 0.0
+    for i in P.keys():
+        if i not in fixed_P:
+            fixed_P[i] = 0.0
+    if fixed_lambda is None:
+        fixed_lambda = 0.0
+    return {"lambda": fixed_lambda, "eta": fixed_eta, "P": fixed_P}
 
 
 def choose_mode_and_solve():
     print("Mode options:")
     print("  1) Solve without fixing any variables")
     print("  2) Interactively choose variables to fix (press Enter to skip each)")
+    print("  3) Fix all variables (including lambda) and only print lambda configuration values")
     try:
-        mode = input("Select mode [1/2]: ").strip()
+        mode = input("Select mode [1/2/3]: ").strip()
     except EOFError:
         mode = "1"
 
     if mode == "2":
         run_interactive_fixing()
+    elif mode == "3":
+        fixed_vals = run_fix_all()
+        print_lambda_calculations(fixed_vals)
+        return
 
     m.optimize()
 
     if m.status == GRB.OPTIMAL:
         print("\nOptimal solution:")
-        print(f"lambda: {(lmbda.X / Delta):.9g}")
+        print(f"lambda: {(lmbda.X):.9g}")
         print("eta:")
         for i in sorted(eta.keys()):
             print(f"  eta_{i}: {eta[i].X:.9g}")
@@ -199,13 +313,6 @@ def choose_mode_and_solve():
             print(f"  P_{i}: {P[i].X:.9g}")
         print("lambdas:")
         print_lambda_calculations()
-        print("alphas/betas:")
-        print(f"  alpha_1: {alpha_1.X:.9g}")
-        print(f"  alpha_2: {alpha_2.X:.9g}")
-        print(f"  alpha_1_case_1: {alpha_2_case_1.X:.9g}")
-        print(f"  alpha_2_case_2: {alpha_2_case_2.X:.9g}")
-        print(f"  beta_1:  {beta_1.X:.9g}")
-        print(f"  beta_2:  {beta_2.X:.9g}")
     else:
         print(f"Model status: {m.status}")
 
