@@ -43,8 +43,8 @@ def Eta(i: int):
 
 def Gamma(cfg):
     if cfg in UNBLOCKED_CONFIGS:
-        return (lmbda - (1 - 2 * P[2]))
-    return (lmbda - (1 - 2 * P[3]))
+        return lmbda - (1 - 2 * P[2])
+    return lmbda - (1 - 2 * P[3])
 
 
 def lambda_bounds(cfg):
@@ -114,8 +114,6 @@ for j in range(2, N_MAX + 1):
 
 for i in range(1, DC_MAX):
     m.addConstr(eta[i] <= eta[i + 1], name=f"eta_monotone_{i}")
-
-# Removed alpha/beta bounds and definitions constraints
 
 # lambda constraints
 for cfg in configs:
@@ -287,7 +285,9 @@ def choose_mode_and_solve():
     print("Mode options:")
     print("  1) Solve without fixing any variables")
     print("  2) Interactively choose variables to fix (press Enter to skip each)")
-    print("  3) Fix all variables (including lambda) and only print lambda configuration values")
+    print(
+        "  3) Fix all variables (including lambda) and only print lambda configuration values"
+    )
     try:
         mode = input("Select mode [1/2/3]: ").strip()
     except EOFError:
