@@ -27,13 +27,15 @@ DC_EQ1_CASES = {(2, 2), (3, 2), (4, 2)}
 
 # Model
 m = gp.Model("colorings_qp")
+m.Params.NonConvex = 2
 
 # Variables
-lmbda = m.addVar(lb=0.0, name="lambda")
+lmbda = m.addVar(lb=0.0, ub=2.0, name="lambda")
 
 eta = {i: m.addVar(lb=0.0, ub=1, name=f"eta_{i}") for i in range(1, DC_MAX + 1)}
 P = {i: m.addVar(lb=0.0, ub=1.0, name=f"P_{i}") for i in range(1, N_MAX + 1)}
-lam = {cfg: m.addVar(name=f"lambda_{cfg}") for cfg in configs}
+lam = {cfg: m.addVar(lb=0.0, ub=2.0, name=f"lambda_{cfg}") for cfg in configs}
+delta = {cfg: m.addVar(lb=0.0, ub=1.0, name=f"delta_{cfg}") for cfg in configs}
 
 
 # scaled etas (η_i)
@@ -42,12 +44,13 @@ def Eta(i: int):
 
 
 def Gamma(cfg):
-    if cfg in UNBLOCKED_CONFIGS:
-        return lmbda - (1 - 2 * P[2])
-    return lmbda - (1 - 2 * P[3])
+    # if cfg in UNBLOCKED_CONFIGS:
+    #     return lmbda - (1 - 2 * P[2])
+    # return lmbda - (1 - 2 * P[3])
+    return lmbda - (1 - P[cfg[0]] - P[cfg[1]])
 
 
-def lambda_bounds(cfg):
+def lambda_bounds(cfg, _print=False):
     bounds = []
     if cfg == (2, 2):
         if USE_ORIGINAL:
@@ -55,6 +58,9 @@ def lambda_bounds(cfg):
         else:
             alpha_1_val = Eta(1) * (Gamma(cfg) + (1 + P[2]))
         bounds.append(2 - P[2] + alpha_1_val)
+
+        if _print:
+            print(f"Gamma: {(Eta(1) * Gamma(cfg)).getValue()}")
 
     elif cfg == (3, 3):
         if USE_ORIGINAL:
@@ -66,14 +72,14 @@ def lambda_bounds(cfg):
                 + Eta(2) * Gamma(cfg)
                 + 2 * Eta(2)
                 - (1 - P[3]) * Eta(1)
-                + (Eta(2) - Eta(1)) * 2 * lmbda
+                + (Eta(2) - Eta(1)) * (2 * lmbda - (1 / 2))
             )
             expr2 = (
                 1.5
                 + 0.5 * P[3]
                 + Eta(2) * Gamma(cfg)
                 + (1 + P[2]) * Eta(2)
-                + (Eta(2) - Eta(1)) * 2 * lmbda
+                + (Eta(2) - Eta(1)) * (2 * lmbda - (1 / 2))
             )
             bounds.extend([expr1, expr2])
 
@@ -98,7 +104,8 @@ def lambda_bounds(cfg):
         bounds.append(1.5 + 2 * P[3])
 
     else:
-        raise ValueError(f"Unknown config: {cfg}")
+        # raise ValueError(f"Unknown config: {cfg}")
+        pass
 
     return bounds
 
@@ -109,18 +116,25 @@ m.setObjective(lmbda, GRB.MINIMIZE)
 # P_1 = 1
 m.addConstr(P[1] == 1, name="P1_eq_1")
 
-for j in range(2, N_MAX + 1):
+for j in range(3, N_MAX + 1):
     m.addConstr(P[j] <= (2.0 / 3.0) * P[j - 1], name=f"P_decay_{j}")
 
 for i in range(1, DC_MAX):
     m.addConstr(eta[i] <= eta[i + 1], name=f"eta_monotone_{i}")
 
+# enforce that all delta variables sum to 1
+m.addConstr(gp.quicksum(delta[cfg] for cfg in configs) == 1, name="delta_sum_to_1")
+
 # lambda constraints
 for cfg in configs:
     lbs = lambda_bounds(cfg)
     for k, expr in enumerate(lbs):
-        m.addConstr(lam[cfg] >= expr, name=f"lambda_{cfg}_{k}")
-    m.addConstr(lmbda >= lam[cfg], name=f"obj_bounds_{cfg}")
+        # m.addConstr(lam[cfg] >= expr, name=f"lambda_{cfg}_{k}")
+        m.addConstr(lmbda >= expr, name=f"lambda_{cfg}_{k}")
+    # m.addConstr(lmbda >= lam[cfg], name="worst_case_{cfg}")
+
+# summation = gp.quicksum(delta[cfg] * lam[cfg] for cfg in configs)
+# m.addConstr(lmbda >= summation, name="summation_bound")
 
 ################################
 ## QUADRATIC PROGRAM ENDS HERE
@@ -173,14 +187,14 @@ def lambda_bounds_numeric(cfg, fixed):
                 + eta_val[2] * gamma
                 + 2 * eta_val[2]
                 - (1 - P_val[3]) * eta_val[1]
-                + (eta_val[2] - eta_val[1]) * 2 * lmbda_val
+                + (eta_val[2] - eta_val[1]) * (2 * lmbda_val - (1 / 2))
             )
             expr2 = (
                 1.5
                 + 0.5 * P_val[3]
                 + eta_val[2] * gamma
                 + (1 + P_val[2]) * eta_val[2]
-                + (eta_val[2] - eta_val[1]) * 2 * lmbda_val
+                + (eta_val[2] - eta_val[1]) * (2 * lmbda_val - (1 / 2))
             )
             bounds.extend([expr1, expr2])
 
@@ -222,13 +236,22 @@ def print_lambda_calculations(fixed_vals=None):
                     print(f"lambda_calc{cfg}: {v:.9g}")
             except Exception as e:
                 print(f"lambda_calc{cfg}: ERROR: {e}")
+            print()
     else:
         for cfg in configs:
-            for val in lambda_bounds(cfg):
+            for val in lambda_bounds(cfg, _print=True):
                 try:
                     print(f"lambda_calc{cfg}: {val.getValue():.9g}")
                 except Exception as e:
                     print(f"lambda_calc{cfg}: ERROR: {e}")
+            print()
+
+        # print("\nConstraint slacks:")
+        # for constr in m.getConstrs():
+        #     if abs(constr.Slack) < 1e-6:
+        #         print(f"  TIGHT: {constr.ConstrName} (slack={constr.Slack:.3g})")
+        #     else:
+        #         print(f"  slack {constr.ConstrName}: {constr.Slack:.3g}")
 
 
 def run_fix_all():
@@ -300,6 +323,7 @@ def choose_mode_and_solve():
         print_lambda_calculations(fixed_vals)
         return
 
+    m.write("model.lp")
     m.optimize()
 
     if m.status == GRB.OPTIMAL:

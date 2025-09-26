@@ -12,3 +12,4 @@ old_files
 
 # Virtual environments
 .venv
+*.lp
